@@ -11,8 +11,8 @@ It turns out that it is not very difficult to get something working as you can s
 
 ![demo](demo.gif)
 
-Note: If you try to run locally prefer testing with Chrome locally because I encountered issues with Firefox. 
-Also, if you are testing with a friend it might not work as I am using only a STUN server. From the test I made, the connection is often blocked on corporate networks and using a TURN server would solve the problem. But unlike, STUN server there aren't free servers to use.
+Note: If you try to run locally prefer testing with Chrome locally because I encountered issues with Firefox. Also, be wary that some extensions might block WebRTC connections.
+Also, if you are testing with a friend it might not work as I am using only a STUN server. From the tests I made, I found out that the connections are often blocked on corporate networks and using a TURN server would solve the problem. But unlike STUN server there aren't free TURN servers.
 Finally, the error handling is not totally done yet as I don't know how I actually handle errors (and also what the WebRTC API allows me to do). If you are stuck reload the page on both side and try again.
 
 To build this project you need to:
