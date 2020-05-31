@@ -121,7 +121,7 @@ impl WebRTCManager {
             .send_with_str(&message_content)
             .expect("channel is open");
 
-            //TODO error handling ?
+        //TODO error handling ?
     }
 
     pub fn get_state(&self) -> State {
@@ -145,7 +145,6 @@ impl WebRTCManager {
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         connection_string: &ConnectionString,
     ) {
-
         if web_rtc_manager.borrow().exit_offer_or_answer_early {
             return;
         }
@@ -236,7 +235,9 @@ impl WebRTCManager {
         let web_rtc_manager_rc_clone = web_rtc_manager.clone();
 
         let set_remote_description_exception_handler = Closure::wrap(Box::new(move |a: JsValue| {
-            web_rtc_manager_rc_clone.borrow_mut().exit_offer_or_answer_early = true;
+            web_rtc_manager_rc_clone
+                .borrow_mut()
+                .exit_offer_or_answer_early = true;
 
             console::log_1(&"Exception handler !".into());
             console::log_1(&a);
@@ -247,16 +248,16 @@ impl WebRTCManager {
             )
             .expect("alert should work");
 
-            web_rtc_manager_rc_clone.borrow().parent_link.send_message(Msg::ResetWebRTC);
+            web_rtc_manager_rc_clone
+                .borrow()
+                .parent_link
+                .send_message(Msg::ResetWebRTC);
         }) as SingleArgJsFn);
-
 
         let connection_string = Rc::new(connection_string.clone());
         let web_rtc_manager_rc_clone = web_rtc_manager.clone();
         let set_candidates_function: SingleArgJsFn = Box::new(move |_: JsValue| {
-            WebRTCManager::set_candidates(
-                web_rtc_manager_rc_clone.clone(), 
-                &*connection_string);
+            WebRTCManager::set_candidates(web_rtc_manager_rc_clone.clone(), &*connection_string);
         });
         let set_candidates_closure = Closure::wrap(set_candidates_function);
 
@@ -274,9 +275,7 @@ impl WebRTCManager {
             .promise_exception_handlers
             .push(set_remote_description_exception_handler);
 
-        web_rtc_manager
-            .borrow_mut()
-            .set_candidate_closure = Some(set_candidates_closure);
+        web_rtc_manager.borrow_mut().set_candidate_closure = Some(set_candidates_closure);
 
         Ok(())
     }
@@ -330,7 +329,6 @@ impl WebRTCManager {
                 String::from(JSON::stringify(&answer).unwrap());
         });
 
-        
         let set_local_description_closure = Closure::wrap(set_local_description_function);
         let web_rtc_manager_rc_clone = web_rtc_manager.clone();
 
@@ -339,26 +337,28 @@ impl WebRTCManager {
             let clone = web_rtc_manager_rc_clone.clone();
 
             let set_candidates_function: SingleArgJsFn = Box::new(move |_: JsValue| {
-                WebRTCManager::set_candidates(
-                    clone.clone(), 
-                    &*connection_string);
+                WebRTCManager::set_candidates(clone.clone(), &*connection_string);
             });
 
             let set_candidates_closure = Closure::wrap(set_candidates_function);
             let web_rtc_manager_rc_clone_for_error_handler = web_rtc_manager_rc_clone.clone();
 
-            let create_answer_exception_handler = Closure::wrap(Box::new(move |_send_channel: JsValue| {
-                web_rtc_manager_rc_clone_for_error_handler.borrow_mut().exit_offer_or_answer_early = true;
+            let create_answer_exception_handler = Closure::wrap(Box::new(
+                move |_send_channel: JsValue| {
+                    web_rtc_manager_rc_clone_for_error_handler
+                        .borrow_mut()
+                        .exit_offer_or_answer_early = true;
 
-                console::log_1(&"Exception handler !".into());
-                console::log_1(&a);
-    
-                web_sys::Window::alert_with_message(
+                    console::log_1(&"Exception handler !".into());
+                    console::log_1(&a);
+
+                    web_sys::Window::alert_with_message(
                     &web_sys::window().unwrap(),
                     &format!("Promise create_answer encountered an exception. See console for details"),
                 )
                 .expect("alert should work");
-            }) as SingleArgJsFn);
+                },
+            ) as SingleArgJsFn);
 
             let _promise = web_rtc_manager_rc_clone
                 .borrow()
@@ -375,15 +375,19 @@ impl WebRTCManager {
                 .promise_exception_handlers
                 .push(create_answer_exception_handler);
 
-            web_rtc_manager_rc_clone.borrow_mut().set_candidate_closure = Some(set_candidates_closure);
+            web_rtc_manager_rc_clone.borrow_mut().set_candidate_closure =
+                Some(set_candidates_closure);
         });
 
         let create_answer_closure = Closure::wrap(create_answer_function);
 
         let web_rtc_manager_rc_clone = web_rtc_manager.clone();
-        let set_remote_description_exception_handler = Closure::wrap(Box::new(move |_send_channel: JsValue| {
-            web_rtc_manager_rc_clone.borrow_mut().exit_offer_or_answer_early = true;
-        }) as SingleArgJsFn);
+        let set_remote_description_exception_handler =
+            Closure::wrap(Box::new(move |_send_channel: JsValue| {
+                web_rtc_manager_rc_clone
+                    .borrow_mut()
+                    .exit_offer_or_answer_early = true;
+            }) as SingleArgJsFn);
 
         let _promise = web_rtc_manager
             .borrow()
@@ -463,7 +467,6 @@ impl WebRTCManager {
     ) -> SingleArgClosure {
         let on_ice_candidate_closure =
             Closure::wrap(Box::new(move |ice_connection_event: JsValue| {
-
                 console::log_1(&ice_connection_event.clone().into());
 
                 let ice_connection_event_obj: RtcPeerConnectionIceEvent =
@@ -473,7 +476,6 @@ impl WebRTCManager {
                     let candidate_str = candidate.candidate();
 
                     if !candidate_str.is_empty() {
-
                         console::log_1(&candidate_str.clone().into());
 
                         let saved_candidate = IceCandidate {
