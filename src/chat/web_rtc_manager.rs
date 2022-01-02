@@ -10,22 +10,12 @@ use std::rc::Rc;
 use std::str;
 
 use base64;
-#[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
-#[allow(unused_imports)]
-use yew::services::{ConsoleService, IntervalService, Task, TimeoutService};
-#[allow(unused_imports)]
-use yew::{html, App, Callback, Component, ComponentLink, Html, InputData, ShouldRender};
+
+use yew::{ComponentLink};
 
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
 type SingleArgJsFn = Box<dyn FnMut(JsValue)>;
-
-#[allow(dead_code)]
-type NoArgClosure = Closure<dyn FnMut()>;
-#[allow(dead_code)]
-type NoArgJsFn = Box<dyn FnMut()>;
-#[allow(dead_code)]
-type PromiseConstructorType = Box<dyn FnMut(Function, Function)>;
 
 const STUN_SERVER: &str = "stun:stun.l.google.com:19302";
 
@@ -57,7 +47,7 @@ pub enum OfferError {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum State {
-    DefaultState,
+    Default,
     Server(ConnectionState),
     Client(ConnectionState),
 }
@@ -78,11 +68,11 @@ pub trait NetworkManager {
     fn get_ice_candidates(&self) -> Vec<IceCandidate>;
     fn validate_offer(
         web_rtc_manager: Rc<RefCell<Self>>,
-        str: &String,
+        str: &str,
     ) -> Result<(), OfferError>;
     fn validate_answer(
         web_rtc_manager: Rc<RefCell<Self>>,
-        str: &String,
+        str: &str,
     ) -> Result<(), OfferError>;
     fn start_web_rtc(web_rtc_manager: Rc<RefCell<Self>>) -> Result<(), JsValue>;
 }
@@ -101,7 +91,7 @@ impl NetworkManager for WebRTCManager {
 
     fn new(link: ComponentLink<ChatModel<Self>>) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(WebRTCManager {
-            state: State::DefaultState,
+            state: State::Default,
             rtc_peer_connection: None,
             data_channel: None,
             ice_candidates: Vec::new(),
@@ -139,7 +129,7 @@ impl NetworkManager for WebRTCManager {
 
     fn validate_offer(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
-        str: &String,
+        str: &str,
     ) -> Result<(), OfferError> {
         let connection_string = WebRTCManager::parse_base64_str_to_connection(str);
 
@@ -179,7 +169,7 @@ impl NetworkManager for WebRTCManager {
 
                     web_sys::Window::alert_with_message(
                         &web_sys::window().unwrap(),
-                        &format!("Promise create_answer encountered an exception. See console for details"),
+                        &"Promise create_answer encountered an exception. See console for details".to_string(),
                     )
                         .expect("alert should work");
                 },
@@ -187,7 +177,7 @@ impl NetworkManager for WebRTCManager {
 
             let web_rtc_manager_rc_clone_clone = web_rtc_manager_rc_clone.clone();
 
-            let set_local_description_function: SingleArgJsFn = Box::new(move |answer: JsValue| {
+            let set_local_description_closure = Closure::wrap(Box::new(move |answer: JsValue| {
                 let answer = answer.unchecked_into::<RtcSessionDescriptionInit>();
 
                 let set_local_description_exception_handler = WebRTCManager::get_exception_handler(
@@ -209,11 +199,9 @@ impl NetworkManager for WebRTCManager {
 
                 web_rtc_manager_rc_clone_clone.borrow_mut().offer =
                     String::from(JSON::stringify(&answer).unwrap());
-            });
+            }) as SingleArgJsFn);
 
-            let set_local_description_closure = Closure::wrap(set_local_description_function);
-
-            let _promise = web_rtc_manager_rc_clone
+            web_rtc_manager_rc_clone
                 .borrow()
                 .rtc_peer_connection
                 .as_ref()
@@ -255,7 +243,7 @@ impl NetworkManager for WebRTCManager {
 
     fn validate_answer(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
-        str: &String,
+        str: &str,
     ) -> Result<(), OfferError> {
         let connection_string = WebRTCManager::parse_base64_str_to_connection(str);
 
@@ -283,7 +271,7 @@ impl NetworkManager for WebRTCManager {
 
             web_sys::Window::alert_with_message(
                 &web_sys::window().unwrap(),
-                &format!("Promise set_remote_description encountered an exception. See console for details"),
+                &"Promise set_remote_description encountered an exception. See console for details".to_string(),
             )
                 .expect("alert should work");
 
@@ -293,7 +281,7 @@ impl NetworkManager for WebRTCManager {
                 .send_message(Msg::ResetWebRTC);
         }) as SingleArgJsFn);
 
-        let connection_string = Rc::new(connection_string.clone());
+        let connection_string = Rc::new(connection_string);
         let web_rtc_manager_rc_clone = web_rtc_manager.clone();
         let set_candidates_function: SingleArgJsFn = Box::new(move |_: JsValue| {
             WebRTCManager::set_candidates(web_rtc_manager_rc_clone.clone(), &*connection_string);
@@ -413,7 +401,7 @@ impl NetworkManager for WebRTCManager {
         let web_rtc_manager_argument = web_rtc_manager.clone();
         let on_ice_candidate_closure =
             Closure::wrap(Box::new(move |ice_connection_event: JsValue| {
-                console::log_1(&ice_connection_event.clone().into());
+                console::log_1(&ice_connection_event);
 
                 let ice_connection_event_obj: RtcPeerConnectionIceEvent =
                     ice_connection_event.unchecked_into::<RtcPeerConnectionIceEvent>();
@@ -503,7 +491,7 @@ impl WebRTCManager {
         }
     }
 
-    fn parse_base64_str_to_connection(str: &String) -> Result<ConnectionString, OfferError> {
+    fn parse_base64_str_to_connection(str: &str) -> Result<ConnectionString, OfferError> {
         base64::decode(str).map_err(|_| OfferError::InvalidBase64).and_then(|a| {
             let to_str = str::from_utf8(&a);
             match to_str {
@@ -528,7 +516,9 @@ impl WebRTCManager {
     fn get_channel_status_change_closure(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     ) -> SingleArgClosure {
-        let channel_status_change_closure = Closure::wrap(Box::new(move |_send_channel: JsValue| {
+        
+
+        Closure::wrap(Box::new(move |_send_channel: JsValue| {
             let state = web_rtc_manager
                 .borrow()
                 .data_channel
@@ -558,13 +548,13 @@ impl WebRTCManager {
                 .borrow()
                 .parent_link
                 .send_message(Msg::UpdateWebRTCState(web_rtc_state));
-        }) as SingleArgJsFn);
-
-        channel_status_change_closure
+        }) as SingleArgJsFn)
     }
 
     fn get_on_data_closure(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> SingleArgClosure {
-        let on_data = Closure::wrap(Box::new(move |arg: JsValue| {
+        
+
+        Closure::wrap(Box::new(move |arg: JsValue| {
             let message_event = arg.unchecked_into::<web_sys::MessageEvent>();
 
             let msg_content: String = message_event.data().as_string().unwrap();
@@ -574,16 +564,15 @@ impl WebRTCManager {
                 .borrow()
                 .parent_link
                 .send_message(Msg::NewMessage(msg));
-        }) as SingleArgJsFn);
-
-        on_data
+        }) as SingleArgJsFn)
     }
 
     fn get_on_ice_connection_state_change_closure(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     ) -> SingleArgClosure {
-        let on_ice_connection_state_change =
-            Closure::wrap(Box::new(move |_ice_connection_state_event: JsValue| {
+        
+
+        Closure::wrap(Box::new(move |_ice_connection_state_event: JsValue| {
                 let ice_new_state: RtcIceConnectionState = {
                     let inner = web_rtc_manager.borrow();
                     let connection: &RtcPeerConnection =
@@ -613,16 +602,15 @@ impl WebRTCManager {
                     .borrow()
                     .parent_link
                     .send_message(Msg::UpdateWebRTCState(web_rtc_state));
-            }) as SingleArgJsFn);
-
-        on_ice_connection_state_change
+            }) as SingleArgJsFn)
     }
 
     fn get_on_ice_gathering_state_change_closure(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
     ) -> SingleArgClosure {
-        let on_ice_gathering_state_change =
-            Closure::wrap(Box::new(move |_ice_gathering_state: JsValue| {
+        
+
+        Closure::wrap(Box::new(move |_ice_gathering_state: JsValue| {
                 let ice_new_state: RtcIceGatheringState = {
                     let inner = web_rtc_manager.borrow();
                     let connection: &RtcPeerConnection =
@@ -651,16 +639,16 @@ impl WebRTCManager {
                     .borrow()
                     .parent_link
                     .send_message(Msg::UpdateWebRTCState(web_rtc_state));
-            }) as SingleArgJsFn);
-
-        on_ice_gathering_state_change
+            }) as SingleArgJsFn)
     }
 
     fn get_exception_handler(
         _web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         message: String,
     ) -> SingleArgClosure {
-        let exception_handler = Closure::wrap(Box::new(move |a: JsValue| {
+        
+
+        Closure::wrap(Box::new(move |a: JsValue| {
             // TODO
             console::log_1(&"Exception handler !".into());
             console::log_1(&JsValue::from_str(&message));
@@ -668,12 +656,10 @@ impl WebRTCManager {
 
             web_sys::Window::alert_with_message(
                 &web_sys::window().unwrap(),
-                &format!("Promise encountered an exception. See console for details"),
+                &"Promise encountered an exception. See console for details".to_string(),
             )
             .expect("alert should work");
-        }) as SingleArgJsFn);
-
-        exception_handler
+        }) as SingleArgJsFn)
     }
 
     fn set_data_channel(web_rtc_manager: Rc<RefCell<WebRTCManager>>, data_channel: RtcDataChannel) {

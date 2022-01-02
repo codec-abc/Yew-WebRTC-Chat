@@ -34,8 +34,8 @@ pub struct Message {
 impl Message {
     pub fn new(content: String, sender: MessageSender) -> Message {
         Message {
-            content: content,
-            sender: sender,
+            content,
+            sender,
         }
     }
 }
@@ -95,8 +95,8 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                     .borrow_mut()
                     .set_state(State::Server(ConnectionState::new()));
                 T::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::ConnectToServer => {
@@ -104,8 +104,8 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                     .borrow_mut()
                     .set_state(State::Client(ConnectionState::new()));
                 T::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::UpdateWebRTCState(web_rtc_state) => {
@@ -118,8 +118,8 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 // let hash_as_string = hex::encode(hash);
                 // console::log_1(&hash_as_string.into());
 
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::ResetWebRTC => {
@@ -128,20 +128,20 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.chat_value = "".into();
                 self.value = "".into();
 
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::UpdateInputValue(val) => {
                 self.value = val;
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::UpdateInputChatValue(val) => {
                 self.chat_value = val;
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::ValidateOffer => {
@@ -184,15 +184,15 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                     }
                 };
 
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::NewMessage(message) => {
                 self.messages.push(message);
                 self.scroll_top();
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::Send => {
@@ -201,8 +201,8 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.web_rtc_manager.borrow().send_message(&self.chat_value);
                 self.chat_value = "".into();
                 self.scroll_top();
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::Disconnect => {
@@ -210,8 +210,8 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::OnKeyUp(event) => {
@@ -224,14 +224,14 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                     self.chat_value = "".into();
                     self.scroll_top();
                 }
-                let re_render = true;
-                return re_render;
+                
+                true
             }
 
             Msg::CopyToClipboard => {
                 self.copy_content_to_clipboard();
-                let re_render = true;
-                return re_render;
+                
+                true
             }
         }
     }
@@ -242,7 +242,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
 
     fn view(&self) -> Html {
         match &self.web_rtc_manager.borrow().get_state() {
-            State::DefaultState => {
+            State::Default => {
                 html! {
                     <>
                         { self.get_chat_header() }
@@ -435,7 +435,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
 
     fn get_chat_header(&self) -> Html {
         let is_disconnect_button_visible =
-            self.web_rtc_manager.borrow().get_state() != State::DefaultState;
+            self.web_rtc_manager.borrow().get_state() != State::Default;
         html! {
             <header class="msger-header">
                 <div style="font-size:25">
@@ -467,24 +467,14 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
 
     fn is_chat_enabled(&self) -> bool {
         match &self.web_rtc_manager.borrow().get_state() {
-            State::DefaultState => false,
+            State::Default => false,
             State::Server(connection_state) => {
-                if connection_state.data_channel_state.is_some()
+                connection_state.data_channel_state.is_some()
                     && connection_state.data_channel_state.unwrap() == RtcDataChannelState::Open
-                {
-                    true
-                } else {
-                    false
-                }
             }
             State::Client(connection_state) => {
-                if connection_state.data_channel_state.is_some()
+                connection_state.data_channel_state.is_some()
                     && connection_state.data_channel_state.unwrap() == RtcDataChannelState::Open
-                {
-                    true
-                } else {
-                    false
-                }
             }
         }
     }
@@ -557,9 +547,9 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         };
 
         let serialized: String = serde_json::to_string(&connection_string).unwrap();
-        let encoded = base64::encode(serialized);
+        
 
-        encoded
+        base64::encode(serialized)
     }
 
     fn get_offer_and_candidates(&self) -> Html {
@@ -587,7 +577,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         let state = self.web_rtc_manager.borrow().get_state();
 
         let html = match state {
-            State::DefaultState => html! { <div style="font-size:8;"> { "|Default State|"} </div> },
+            State::Default => html! { <div style="font-size:8;"> { "|Default State|"} </div> },
             State::Server(connection_state) => html! {
                 <div style="font-size:8;">
                     { "|Server|"}
@@ -615,7 +605,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         let aux = document.create_element("input").unwrap();
         let aux = aux.dyn_into::<web_sys::HtmlInputElement>().unwrap();
         let content: String = document
-            .get_element_by_id("copy-elem".into())
+            .get_element_by_id("copy-elem")
             .unwrap()
             .inner_html();
         let _result = aux.set_attribute("value", &content);
@@ -659,7 +649,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
 
 fn get_debug_state_string(state: &State) -> String {
     match state {
-        State::DefaultState => "Default State".into(),
+        State::Default => "Default State".into(),
         State::Server(connection_state) => format!(
             "{}\nice gathering: {:?}\nice connection: {:?}\ndata channel: {:?}\n",
             "Server",
