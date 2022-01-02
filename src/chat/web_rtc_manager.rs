@@ -67,7 +67,7 @@ pub trait NetworkManager {
     fn send_message(&self, message_content: &str);
     fn get_state(&self) -> State;
     fn set_state(&mut self, new_state: State);
-    fn get_offer(&self) -> String;
+    fn get_offer(&self) -> Option<String>;
     fn get_ice_candidates(&self) -> Vec<IceCandidate>;
     fn validate_offer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> Result<(), OfferError>;
     fn validate_answer(web_rtc_manager: Rc<RefCell<Self>>, str: &str) -> Result<(), OfferError>;
@@ -80,7 +80,7 @@ pub struct WebRTCManager {
     data_channel: Option<RtcDataChannel>,
     exit_offer_or_answer_early: bool,
     ice_candidates: Vec<IceCandidate>,
-    offer: String,
+    offer: Option<String>,
     parent_link: ComponentLink<ChatModel<Self>>,
 }
 
@@ -91,7 +91,7 @@ impl NetworkManager for WebRTCManager {
             rtc_peer_connection: None,
             data_channel: None,
             ice_candidates: Vec::new(),
-            offer: "".into(),
+            offer: None,
             parent_link: link,
             exit_offer_or_answer_early: false,
         }))
@@ -115,7 +115,7 @@ impl NetworkManager for WebRTCManager {
         self.state = new_state;
     }
 
-    fn get_offer(&self) -> String {
+    fn get_offer(&self) -> Option<String> {
         self.offer.clone()
     }
 
@@ -194,7 +194,7 @@ impl NetworkManager for WebRTCManager {
                 console::log_1(&answer.clone().into());
 
                 web_rtc_manager_rc_clone_clone.borrow_mut().offer =
-                    String::from(JSON::stringify(&answer).unwrap());
+                    Some(String::from(JSON::stringify(&answer).unwrap()));
             }) as SingleArgJsFn);
 
             // TODO: .await this
@@ -343,7 +343,7 @@ impl NetworkManager for WebRTCManager {
                     console::log_1(&rtc_session_description.clone().into());
 
                     web_rtc_manager_rc_clone.borrow_mut().offer =
-                        String::from(JSON::stringify(&rtc_session_description).unwrap());
+                        Some(String::from(JSON::stringify(&rtc_session_description).unwrap()));
 
                     let set_local_description_exception_handler =
                         WebRTCManager::get_exception_handler(

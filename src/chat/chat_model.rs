@@ -526,7 +526,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
 
     fn get_serialized_offer_and_candidates(&self) -> String {
         let connection_string = ConnectionString {
-            offer: self.web_rtc_manager.borrow().get_offer(),
+            offer: self.web_rtc_manager.borrow().get_offer().expect("no offer yet"),
             ice_candidates: self.web_rtc_manager.borrow().get_ice_candidates(),
         };
 
