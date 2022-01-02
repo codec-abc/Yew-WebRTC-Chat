@@ -69,8 +69,17 @@ pub struct IceCandidate {
     sdp_m_line_index: u16,
 }
 
-trait NetworkManager {
-
+pub trait NetworkManager {
+    fn send_message(&self, message_content: &str);
+    fn get_state(&self) -> State;
+    fn set_state(&mut self, new_state: State);
+    fn get_offer(&self) -> String;
+    fn get_ice_candidates(&self) -> Vec<IceCandidate>;
+    fn validate_offer(
+        web_rtc_manager: Rc<RefCell<WebRTCManager>>,
+        str: &String,
+    ) -> Result<(), OfferError>;
+    fn start_web_rtc(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> Result<(), JsValue>;
 }
 
 pub struct WebRTCManager {
@@ -83,176 +92,34 @@ pub struct WebRTCManager {
     parent_link: ComponentLink<ChatModel>,
 }
 
-impl WebRTCManager {
-    pub fn new(link: ComponentLink<ChatModel>) -> Rc<RefCell<WebRTCManager>> {
-        Rc::new(RefCell::new(WebRTCManager {
-            state: State::DefaultState,
-            rtc_peer_connection: None,
-            data_channel: None,
-            ice_candidates: Vec::new(),
-            offer: "".into(),
-            parent_link: link,
-            exit_offer_or_answer_early: false,
-        }))
-    }
-
-    pub fn send_message(&self, message_content: String) {
+impl NetworkManager for WebRTCManager {
+    fn send_message(&self, message_content: &str) {
         self.data_channel
             .as_ref()
             .expect("must have a data channel")
-            .send_with_str(&message_content)
+            .send_with_str(message_content)
             .expect("channel is open");
 
         //TODO error handling ?
     }
 
-    pub fn get_state(&self) -> State {
+    fn get_state(&self) -> State {
         self.state.clone()
     }
 
-    pub fn set_state(&mut self, new_state: State) {
+    fn set_state(&mut self, new_state: State) {
         self.state = new_state;
     }
 
-    pub fn get_offer(&self) -> String {
+    fn get_offer(&self) -> String {
         self.offer.clone()
     }
 
-    pub fn get_ice_candidates(&self) -> Vec<IceCandidate> {
+    fn get_ice_candidates(&self) -> Vec<IceCandidate> {
         self.ice_candidates.clone()
     }
 
-    // TODO : handle error when adding ice_candidate
-    pub fn set_candidates(
-        web_rtc_manager: Rc<RefCell<WebRTCManager>>,
-        connection_string: &ConnectionString,
-    ) {
-        if web_rtc_manager.borrow().exit_offer_or_answer_early {
-            return;
-        }
-
-        for candidate in &connection_string.ice_candidates {
-            let mut ice_candidate_init = RtcIceCandidateInit::new("");
-
-            ice_candidate_init.candidate(&candidate.candidate);
-            ice_candidate_init.sdp_mid(Some(&candidate.sdp_mid));
-            ice_candidate_init.sdp_m_line_index(Some(candidate.sdp_m_line_index));
-
-            let ice_candidate = RtcIceCandidate::new(&ice_candidate_init).expect("valid candidate");
-
-            let add_candidate_exception_handler = WebRTCManager::get_exception_handler(
-                web_rtc_manager.clone(),
-                "add_candidate closure has encountered an exception".into(),
-            );
-
-            let _promise = web_rtc_manager
-                .borrow()
-                .rtc_peer_connection
-                .as_ref()
-                .unwrap()
-                .add_ice_candidate_with_opt_rtc_ice_candidate(Some(&ice_candidate))
-                .catch(&add_candidate_exception_handler);
-        }
-    }
-
-    fn parse_base64_str_to_connection(str: &String) -> Result<ConnectionString, OfferError> {
-        let decoded = base64::decode(str);
-
-        let decoded = decoded.map_err(|_| OfferError::InvalidBase64);
-
-        let decoded_str = decoded.and_then(|a| {
-            let to_str = str::from_utf8(&a);
-            match to_str {
-                Ok(a) => Ok(a.to_string()),
-                Err(_) => Err(OfferError::InvalidString),
-            }
-        });
-
-        let connection_string: Result<ConnectionString, OfferError> =
-            decoded_str.and_then(|a_str| {
-                serde_json::from_str::<ConnectionString>(&a_str)
-                    .map_err(|_| OfferError::SerializationError)
-            });
-
-        let connection_string = match connection_string {
-            Ok(a) => {
-                let remote_description = JSON::parse(&a.offer);
-                if remote_description.is_err() {
-                    // TODO : additional check
-                    return Err(OfferError::InvalidOffer);
-                }
-
-                // TODO : additional check
-                Ok(a)
-            }
-            Err(e) => Err(e),
-        };
-
-        connection_string
-    }
-
-    pub fn validate_answer(
-        web_rtc_manager: Rc<RefCell<WebRTCManager>>,
-        str: &String,
-    ) -> Result<(), OfferError> {
-        let connection_string = WebRTCManager::parse_base64_str_to_connection(str);
-
-        if connection_string.is_err() {
-            return Err(connection_string.err().unwrap());
-        }
-
-        let connection_string = connection_string.ok().unwrap();
-
-        let remote_description_js_value: JsValue =
-            JSON::parse(&connection_string.offer).expect("Expected valid json");
-
-        let remote_description =
-            remote_description_js_value.unchecked_into::<RtcSessionDescriptionInit>();
-
-        let web_rtc_manager_rc_clone = web_rtc_manager.clone();
-
-        let set_remote_description_exception_handler = Closure::wrap(Box::new(move |a: JsValue| {
-            web_rtc_manager_rc_clone
-                .borrow_mut()
-                .exit_offer_or_answer_early = true;
-
-            console::log_1(&"Exception handler !".into());
-            console::log_1(&a);
-
-            web_sys::Window::alert_with_message(
-                &web_sys::window().unwrap(),
-                &format!("Promise set_remote_description encountered an exception. See console for details"),
-            )
-            .expect("alert should work");
-
-            web_rtc_manager_rc_clone
-                .borrow()
-                .parent_link
-                .send_message(Msg::ResetWebRTC);
-        }) as SingleArgJsFn);
-
-        let connection_string = Rc::new(connection_string.clone());
-        let web_rtc_manager_rc_clone = web_rtc_manager.clone();
-        let set_candidates_function: SingleArgJsFn = Box::new(move |_: JsValue| {
-            WebRTCManager::set_candidates(web_rtc_manager_rc_clone.clone(), &*connection_string);
-        });
-        let set_candidates_closure = Closure::wrap(set_candidates_function);
-
-        let _promise = web_rtc_manager
-            .borrow()
-            .rtc_peer_connection
-            .as_ref()
-            .unwrap()
-            .set_remote_description(&remote_description)
-            .catch(&set_remote_description_exception_handler)
-            .then(&set_candidates_closure);
-
-        set_candidates_closure.forget();
-
-        Ok(())
-    }
-
-    pub fn validate_offer(
+    fn validate_offer(
         web_rtc_manager: Rc<RefCell<WebRTCManager>>,
         str: &String,
     ) -> Result<(), OfferError> {
@@ -293,10 +160,10 @@ impl WebRTCManager {
                     console::log_1(&a);
 
                     web_sys::Window::alert_with_message(
-                    &web_sys::window().unwrap(),
-                    &format!("Promise create_answer encountered an exception. See console for details"),
-                )
-                .expect("alert should work");
+                        &web_sys::window().unwrap(),
+                        &format!("Promise create_answer encountered an exception. See console for details"),
+                    )
+                        .expect("alert should work");
                 },
             ) as SingleArgJsFn);
 
@@ -364,6 +231,290 @@ impl WebRTCManager {
             .then(&create_answer_closure);
 
         create_answer_closure.forget();
+
+        Ok(())
+    }
+
+    fn start_web_rtc(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> Result<(), JsValue> {
+        let rtc_peer_connection = {
+            let ice_servers = Array::new();
+            {
+                let server_entry = Object::new();
+
+                Reflect::set(
+                    &server_entry,
+                    &"urls".into(),
+                    &STUN_SERVER.into(),
+                )?;
+
+                ice_servers.push(&*server_entry);
+            }
+
+            let mut rtc_configuration = RtcConfiguration::new();
+            rtc_configuration.ice_servers(&ice_servers);
+
+            RtcPeerConnection::new_with_configuration(&rtc_configuration)?
+        };
+
+        let create_offer_exception_handler = WebRTCManager::get_exception_handler(
+            web_rtc_manager.clone(),
+            "create_offer closure has encountered an exception".into(),
+        );
+
+        let state = web_rtc_manager.borrow().state.clone();
+
+        match state {
+            State::Server(_connection_state) => {
+                let web_rtc_manager_rc_clone = web_rtc_manager.clone();
+
+                let mut data_channel_init = RtcDataChannelInit::new();
+                data_channel_init.ordered(true);
+
+                let data_channel: RtcDataChannel = rtc_peer_connection
+                    .create_data_channel_with_data_channel_dict("sendChannel", &data_channel_init);
+
+                WebRTCManager::set_data_channel(web_rtc_manager.clone(), data_channel);
+
+                let create_offer_function: SingleArgJsFn = Box::new(move |offer: JsValue| {
+                    let rtc_session_description: RtcSessionDescriptionInit =
+                        offer.unchecked_into::<RtcSessionDescriptionInit>();
+
+                    console::log_1(&rtc_session_description.clone().into());
+
+                    web_rtc_manager_rc_clone.borrow_mut().offer =
+                        String::from(JSON::stringify(&rtc_session_description).unwrap());
+
+                    let set_local_description_exception_handler =
+                        WebRTCManager::get_exception_handler(
+                            web_rtc_manager_rc_clone.clone(),
+                            "set_local_description closure has encountered an exception".into(),
+                        );
+
+                    let _promise = web_rtc_manager_rc_clone
+                        .borrow_mut()
+                        .rtc_peer_connection
+                        .as_ref()
+                        .unwrap()
+                        .set_local_description(&rtc_session_description)
+                        .catch(&set_local_description_exception_handler);
+                });
+
+                let create_offer_closure = Closure::wrap(create_offer_function);
+
+                let _create_offer_promise = rtc_peer_connection
+                    .create_offer()
+                    .then(&create_offer_closure)
+                    .catch(&create_offer_exception_handler);
+
+                create_offer_closure.forget();
+            }
+
+            State::Client(_connection_state) => {
+                let clone = web_rtc_manager.clone();
+
+                let on_data_channel_closure =
+                    Closure::wrap(Box::new(move |data_channel_event: JsValue| {
+                        let data_channel_event =
+                            data_channel_event.unchecked_into::<RtcDataChannelEvent>();
+                        let data_channel = data_channel_event.channel();
+                        WebRTCManager::set_data_channel(clone.clone(), data_channel);
+                    }) as SingleArgJsFn);
+
+                rtc_peer_connection
+                    .set_ondatachannel(Some(on_data_channel_closure.as_ref().unchecked_ref()));
+
+                on_data_channel_closure.forget();
+            }
+
+            _ => {
+                panic!("Not implemented");
+            }
+        };
+
+        let web_rtc_manager_argument = web_rtc_manager.clone();
+        let on_ice_candidate_closure =
+            Closure::wrap(Box::new(move |ice_connection_event: JsValue| {
+                console::log_1(&ice_connection_event.clone().into());
+
+                let ice_connection_event_obj: RtcPeerConnectionIceEvent =
+                    ice_connection_event.unchecked_into::<RtcPeerConnectionIceEvent>();
+
+                if let Some(candidate) = ice_connection_event_obj.candidate() {
+                    let candidate_str = candidate.candidate();
+
+                    if !candidate_str.is_empty() {
+                        console::log_1(&candidate_str.clone().into());
+
+                        let saved_candidate = IceCandidate {
+                            candidate: candidate_str,
+                            sdp_mid: candidate.sdp_mid().unwrap(),
+                            sdp_m_line_index: candidate.sdp_m_line_index().unwrap(),
+                        };
+
+                        web_rtc_manager_argument
+                            .borrow_mut()
+                            .ice_candidates
+                            .push(saved_candidate);
+                    }
+                }
+            }) as SingleArgJsFn);
+
+        let on_ice_connection_state_change_closure =
+            WebRTCManager::get_on_ice_connection_state_change_closure(web_rtc_manager.clone());
+
+        let on_ice_gathering_state_change_closure =
+            WebRTCManager::get_on_ice_gathering_state_change_closure(web_rtc_manager.clone());
+
+        rtc_peer_connection
+            .set_onicecandidate(Some(on_ice_candidate_closure.as_ref().unchecked_ref()));
+
+        rtc_peer_connection.set_oniceconnectionstatechange(Some(
+            on_ice_connection_state_change_closure
+                .as_ref()
+                .unchecked_ref(),
+        ));
+
+        rtc_peer_connection.set_onicegatheringstatechange(Some(
+            on_ice_gathering_state_change_closure
+                .as_ref()
+                .unchecked_ref(),
+        ));
+
+        web_rtc_manager.borrow_mut().rtc_peer_connection = Some(rtc_peer_connection);
+
+        on_ice_candidate_closure.forget();
+        on_ice_connection_state_change_closure.forget();
+        on_ice_gathering_state_change_closure.forget();
+
+        Ok(())
+    }
+}
+
+impl WebRTCManager {
+    pub fn new(link: ComponentLink<ChatModel>) -> Rc<RefCell<WebRTCManager>> {
+        Rc::new(RefCell::new(WebRTCManager {
+            state: State::DefaultState,
+            rtc_peer_connection: None,
+            data_channel: None,
+            ice_candidates: Vec::new(),
+            offer: "".into(),
+            parent_link: link,
+            exit_offer_or_answer_early: false,
+        }))
+    }
+
+    // TODO : handle error when adding ice_candidate
+    fn set_candidates(
+        web_rtc_manager: Rc<RefCell<WebRTCManager>>,
+        connection_string: &ConnectionString,
+    ) {
+        if web_rtc_manager.borrow().exit_offer_or_answer_early {
+            return;
+        }
+
+        for candidate in &connection_string.ice_candidates {
+            let mut ice_candidate_init = RtcIceCandidateInit::new("");
+
+            ice_candidate_init.candidate(&candidate.candidate);
+            ice_candidate_init.sdp_mid(Some(&candidate.sdp_mid));
+            ice_candidate_init.sdp_m_line_index(Some(candidate.sdp_m_line_index));
+
+            let ice_candidate = RtcIceCandidate::new(&ice_candidate_init).expect("valid candidate");
+
+            let add_candidate_exception_handler = WebRTCManager::get_exception_handler(
+                web_rtc_manager.clone(),
+                "add_candidate closure has encountered an exception".into(),
+            );
+
+            let _promise = web_rtc_manager
+                .borrow()
+                .rtc_peer_connection
+                .as_ref()
+                .unwrap()
+                .add_ice_candidate_with_opt_rtc_ice_candidate(Some(&ice_candidate))
+                .catch(&add_candidate_exception_handler);
+        }
+    }
+
+    fn parse_base64_str_to_connection(str: &String) -> Result<ConnectionString, OfferError> {
+        base64::decode(str).map_err(|_| OfferError::InvalidBase64).and_then(|a| {
+            let to_str = str::from_utf8(&a);
+            match to_str {
+                Ok(a) => Ok(a.to_string()),
+                Err(_) => Err(OfferError::InvalidString),
+            }
+        }).and_then(|a_str| {
+            serde_json::from_str::<ConnectionString>(&a_str)
+                .map_err(|_| OfferError::SerializationError)
+        }).and_then(|connection_string| {
+            let remote_description = JSON::parse(&connection_string.offer);
+            if remote_description.is_err() {
+                // TODO : additional check
+                return Err(OfferError::InvalidOffer);
+            }
+
+            // TODO : additional check
+            Ok(connection_string)
+        })
+    }
+
+    pub fn validate_answer(
+        web_rtc_manager: Rc<RefCell<WebRTCManager>>,
+        str: &String,
+    ) -> Result<(), OfferError> {
+        let connection_string = WebRTCManager::parse_base64_str_to_connection(str);
+
+        if connection_string.is_err() {
+            return Err(connection_string.err().unwrap());
+        }
+
+        let connection_string = connection_string.ok().unwrap();
+
+        let remote_description_js_value: JsValue =
+            JSON::parse(&connection_string.offer).expect("Expected valid json");
+
+        let remote_description =
+            remote_description_js_value.unchecked_into::<RtcSessionDescriptionInit>();
+
+        let web_rtc_manager_rc_clone = web_rtc_manager.clone();
+
+        let set_remote_description_exception_handler = Closure::wrap(Box::new(move |a: JsValue| {
+            web_rtc_manager_rc_clone
+                .borrow_mut()
+                .exit_offer_or_answer_early = true;
+
+            console::log_1(&"Exception handler !".into());
+            console::log_1(&a);
+
+            web_sys::Window::alert_with_message(
+                &web_sys::window().unwrap(),
+                &format!("Promise set_remote_description encountered an exception. See console for details"),
+            )
+            .expect("alert should work");
+
+            web_rtc_manager_rc_clone
+                .borrow()
+                .parent_link
+                .send_message(Msg::ResetWebRTC);
+        }) as SingleArgJsFn);
+
+        let connection_string = Rc::new(connection_string.clone());
+        let web_rtc_manager_rc_clone = web_rtc_manager.clone();
+        let set_candidates_function: SingleArgJsFn = Box::new(move |_: JsValue| {
+            WebRTCManager::set_candidates(web_rtc_manager_rc_clone.clone(), &*connection_string);
+        });
+        let set_candidates_closure = Closure::wrap(set_candidates_function);
+
+        let _promise = web_rtc_manager
+            .borrow()
+            .rtc_peer_connection
+            .as_ref()
+            .unwrap()
+            .set_remote_description(&remote_description)
+            .catch(&set_remote_description_exception_handler)
+            .then(&set_candidates_closure);
+
+        set_candidates_closure.forget();
 
         Ok(())
     }
@@ -534,159 +685,5 @@ impl WebRTCManager {
         on_data_closure.forget();
 
         web_rtc_manager.borrow_mut().data_channel = Some(data_channel);
-    }
-
-    pub fn start_web_rtc(web_rtc_manager: Rc<RefCell<WebRTCManager>>) -> Result<(), JsValue> {
-        let rtc_peer_connection = {
-            let ice_servers = Array::new();
-            {
-                let server_entry = Object::new();
-
-                Reflect::set(
-                    &server_entry,
-                    &"urls".into(),
-                    &STUN_SERVER.into(),
-                )?;
-
-                ice_servers.push(&*server_entry);
-            }
-
-            let mut rtc_configuration = RtcConfiguration::new();
-            rtc_configuration.ice_servers(&ice_servers);
-
-            RtcPeerConnection::new_with_configuration(&rtc_configuration)?
-        };
-
-        let create_offer_exception_handler = WebRTCManager::get_exception_handler(
-            web_rtc_manager.clone(),
-            "create_offer closure has encountered an exception".into(),
-        );
-
-        let state = web_rtc_manager.borrow().state.clone();
-
-        match state {
-            State::Server(_connection_state) => {
-                let web_rtc_manager_rc_clone = web_rtc_manager.clone();
-
-                let mut data_channel_init = RtcDataChannelInit::new();
-                data_channel_init.ordered(true);
-
-                let data_channel: RtcDataChannel = rtc_peer_connection
-                    .create_data_channel_with_data_channel_dict("sendChannel", &data_channel_init);
-
-                WebRTCManager::set_data_channel(web_rtc_manager.clone(), data_channel);
-
-                let create_offer_function: SingleArgJsFn = Box::new(move |offer: JsValue| {
-                    let rtc_session_description: RtcSessionDescriptionInit =
-                        offer.unchecked_into::<RtcSessionDescriptionInit>();
-
-                    console::log_1(&rtc_session_description.clone().into());
-
-                    web_rtc_manager_rc_clone.borrow_mut().offer =
-                        String::from(JSON::stringify(&rtc_session_description).unwrap());
-
-                    let set_local_description_exception_handler =
-                        WebRTCManager::get_exception_handler(
-                            web_rtc_manager_rc_clone.clone(),
-                            "set_local_description closure has encountered an exception".into(),
-                        );
-
-                    let _promise = web_rtc_manager_rc_clone
-                        .borrow_mut()
-                        .rtc_peer_connection
-                        .as_ref()
-                        .unwrap()
-                        .set_local_description(&rtc_session_description)
-                        .catch(&set_local_description_exception_handler);
-                });
-
-                let create_offer_closure = Closure::wrap(create_offer_function);
-
-                let _create_offer_promise = rtc_peer_connection
-                    .create_offer()
-                    .then(&create_offer_closure)
-                    .catch(&create_offer_exception_handler);
-
-                create_offer_closure.forget();
-            }
-
-            State::Client(_connection_state) => {
-                let clone = web_rtc_manager.clone();
-
-                let on_data_channel_closure =
-                    Closure::wrap(Box::new(move |data_channel_event: JsValue| {
-                        let data_channel_event =
-                            data_channel_event.unchecked_into::<RtcDataChannelEvent>();
-                        let data_channel = data_channel_event.channel();
-                        WebRTCManager::set_data_channel(clone.clone(), data_channel);
-                    }) as SingleArgJsFn);
-
-                rtc_peer_connection
-                    .set_ondatachannel(Some(on_data_channel_closure.as_ref().unchecked_ref()));
-
-                on_data_channel_closure.forget();
-            }
-
-            _ => {
-                panic!("Not implemented");
-            }
-        };
-
-        let web_rtc_manager_argument = web_rtc_manager.clone();
-        let on_ice_candidate_closure =
-            Closure::wrap(Box::new(move |ice_connection_event: JsValue| {
-                console::log_1(&ice_connection_event.clone().into());
-
-                let ice_connection_event_obj: RtcPeerConnectionIceEvent =
-                    ice_connection_event.unchecked_into::<RtcPeerConnectionIceEvent>();
-
-                if let Some(candidate) = ice_connection_event_obj.candidate() {
-                    let candidate_str = candidate.candidate();
-
-                    if !candidate_str.is_empty() {
-                        console::log_1(&candidate_str.clone().into());
-
-                        let saved_candidate = IceCandidate {
-                            candidate: candidate_str,
-                            sdp_mid: candidate.sdp_mid().unwrap(),
-                            sdp_m_line_index: candidate.sdp_m_line_index().unwrap(),
-                        };
-
-                        web_rtc_manager_argument
-                            .borrow_mut()
-                            .ice_candidates
-                            .push(saved_candidate);
-                    }
-                }
-            }) as SingleArgJsFn);
-
-        let on_ice_connection_state_change_closure =
-            WebRTCManager::get_on_ice_connection_state_change_closure(web_rtc_manager.clone());
-
-        let on_ice_gathering_state_change_closure =
-            WebRTCManager::get_on_ice_gathering_state_change_closure(web_rtc_manager.clone());
-
-        rtc_peer_connection
-            .set_onicecandidate(Some(on_ice_candidate_closure.as_ref().unchecked_ref()));
-
-        rtc_peer_connection.set_oniceconnectionstatechange(Some(
-            on_ice_connection_state_change_closure
-                .as_ref()
-                .unchecked_ref(),
-        ));
-
-        rtc_peer_connection.set_onicegatheringstatechange(Some(
-            on_ice_gathering_state_change_closure
-                .as_ref()
-                .unchecked_ref(),
-        ));
-
-        web_rtc_manager.borrow_mut().rtc_peer_connection = Some(rtc_peer_connection);
-
-        on_ice_candidate_closure.forget();
-        on_ice_connection_state_change_closure.forget();
-        on_ice_gathering_state_change_closure.forget();
-
-        Ok(())
     }
 }

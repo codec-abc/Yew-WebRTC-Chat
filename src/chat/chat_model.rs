@@ -200,10 +200,9 @@ impl Component for ChatModel {
             }
 
             Msg::Send => {
-                let content = self.chat_value.clone();
-                let my_message = Message::new(content.clone(), MessageSender::Me);
+                let my_message = Message::new(self.chat_value.clone(), MessageSender::Me);
                 self.messages.push(my_message);
-                self.web_rtc_manager.borrow().send_message(content);
+                self.web_rtc_manager.borrow().send_message(&self.chat_value);
                 self.chat_value = "".into();
                 self.scroll_top();
                 let re_render = true;
@@ -225,7 +224,7 @@ impl Component for ChatModel {
                     self.messages.push(my_message);
                     self.web_rtc_manager
                         .borrow()
-                        .send_message(self.chat_value.clone());
+                        .send_message(&self.chat_value);
                     self.chat_value = "".into();
                     self.scroll_top();
                 }
@@ -440,7 +439,7 @@ impl ChatModel {
         html! {
             <header class="msger-header">
                 <div style="font-size:25">
-                    {"Rust WebRTC WASM Chat V2"}
+                    {"Rust WebRTC WASM Chat V2.1"}
                 </div>
 
                 { self.get_debug_html() }
