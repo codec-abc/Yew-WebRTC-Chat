@@ -9,13 +9,10 @@ use std::rc::Rc;
 use std::str;
 
 use base64;
-#[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
-#[allow(unused_imports)]
-use yew::services::{ConsoleService, IntervalService, Task, TimeoutService};
-#[allow(unused_imports)]
+
 use yew::{
-    html, html::NodeRef, App, Callback, Component, ComponentLink, Html, InputData, KeyboardEvent,
+    html, html::NodeRef, Component, ComponentLink, Html, InputData, KeyboardEvent,
     ShouldRender,
 };
 
@@ -439,7 +436,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         html! {
             <header class="msger-header">
                 <div style="font-size:25">
-                    {"Rust WebRTC WASM Chat V2.2"}
+                    {"Rust WebRTC WASM Chat V2.3"}
                 </div>
 
                 { self.get_debug_html() }

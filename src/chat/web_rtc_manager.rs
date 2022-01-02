@@ -11,6 +11,7 @@ use std::str;
 
 use base64;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen_futures::JsFuture;
 
 use yew::{ComponentLink};
 
@@ -201,7 +202,8 @@ impl NetworkManager for WebRTCManager {
                     String::from(JSON::stringify(&answer).unwrap());
             }) as SingleArgJsFn);
 
-            web_rtc_manager_rc_clone
+            // TODO: .await this
+            JsFuture::from(web_rtc_manager_rc_clone
                 .borrow()
                 .rtc_peer_connection
                 .as_ref()
@@ -209,13 +211,11 @@ impl NetworkManager for WebRTCManager {
                 .create_answer()
                 .then(&set_local_description_closure)
                 .catch(&create_answer_exception_handler)
-                .then(&set_candidates_closure);
+                .then(&set_candidates_closure));
 
             set_candidates_closure.forget();
             set_local_description_closure.forget();
         });
-
-
 
         let create_answer_closure = Closure::wrap(create_answer_function);
 
