@@ -12,8 +12,7 @@ use base64;
 use serde::{Deserialize, Serialize};
 
 use yew::{
-    html, html::NodeRef, Component, ComponentLink, Html, InputData, KeyboardEvent,
-    ShouldRender,
+    html, html::NodeRef, Component, ComponentLink, Html, InputData, KeyboardEvent, ShouldRender,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -30,10 +29,7 @@ pub struct Message {
 
 impl Message {
     pub fn new(content: String, sender: MessageSender) -> Message {
-        Message {
-            content,
-            sender,
-        }
+        Message { content, sender }
     }
 }
 
@@ -91,8 +87,9 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.web_rtc_manager
                     .borrow_mut()
                     .set_state(State::Server(ConnectionState::new()));
-                T::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
-                
+                T::start_web_rtc(self.web_rtc_manager.clone())
+                    .expect("Failed to start WebRTC manager");
+
                 true
             }
 
@@ -100,8 +97,9 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.web_rtc_manager
                     .borrow_mut()
                     .set_state(State::Client(ConnectionState::new()));
-                T::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
-                
+                T::start_web_rtc(self.web_rtc_manager.clone())
+                    .expect("Failed to start WebRTC manager");
+
                 true
             }
 
@@ -115,7 +113,6 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 // let hash_as_string = hex::encode(hash);
                 // console::log_1(&hash_as_string.into());
 
-                
                 true
             }
 
@@ -125,19 +122,18 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.chat_value = "".into();
                 self.value = "".into();
 
-                
                 true
             }
 
             Msg::UpdateInputValue(val) => {
                 self.value = val;
-                
+
                 true
             }
 
             Msg::UpdateInputChatValue(val) => {
                 self.chat_value = val;
-                
+
                 true
             }
 
@@ -146,10 +142,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
 
                 match state {
                     State::Server(_connection_state) => {
-                        let result = T::validate_answer(
-                            self.web_rtc_manager.clone(),
-                            &self.value,
-                        );
+                        let result = T::validate_answer(self.web_rtc_manager.clone(), &self.value);
 
                         if result.is_err() {
                             web_sys::Window::alert_with_message(
@@ -163,10 +156,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                         }
                     }
                     _ => {
-                        let result = T::validate_offer(
-                            self.web_rtc_manager.clone(),
-                            &self.value,
-                        );
+                        let result = T::validate_offer(self.web_rtc_manager.clone(), &self.value);
 
                         if result.is_err() {
                             web_sys::Window::alert_with_message(
@@ -181,14 +171,13 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                     }
                 };
 
-                
                 true
             }
 
             Msg::NewMessage(message) => {
                 self.messages.push(message);
                 self.scroll_top();
-                
+
                 true
             }
 
@@ -198,7 +187,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.web_rtc_manager.borrow().send_message(&self.chat_value);
                 self.chat_value = "".into();
                 self.scroll_top();
-                
+
                 true
             }
 
@@ -207,7 +196,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
-                
+
                 true
             }
 
@@ -215,19 +204,17 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                 if event.key_code() == 13 && !self.chat_value.is_empty() {
                     let my_message = Message::new(self.chat_value.clone(), MessageSender::Me);
                     self.messages.push(my_message);
-                    self.web_rtc_manager
-                        .borrow()
-                        .send_message(&self.chat_value);
+                    self.web_rtc_manager.borrow().send_message(&self.chat_value);
                     self.chat_value = "".into();
                     self.scroll_top();
                 }
-                
+
                 true
             }
 
             Msg::CopyToClipboard => {
                 self.copy_content_to_clipboard();
-                
+
                 true
             }
         }
@@ -544,7 +531,6 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         };
 
         let serialized: String = serde_json::to_string(&connection_string).unwrap();
-        
 
         base64::encode(serialized)
     }
