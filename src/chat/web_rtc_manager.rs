@@ -69,6 +69,10 @@ pub struct IceCandidate {
     sdp_m_line_index: u16,
 }
 
+trait NetworkManager {
+
+}
+
 pub struct WebRTCManager {
     state: State,
     rtc_peer_connection: Option<RtcPeerConnection>,
@@ -80,8 +84,8 @@ pub struct WebRTCManager {
 }
 
 impl WebRTCManager {
-    pub fn create_default(link: ComponentLink<ChatModel>) -> WebRTCManager {
-        let web_rtc_manager = WebRTCManager {
+    pub fn new(link: ComponentLink<ChatModel>) -> Rc<RefCell<WebRTCManager>> {
+        Rc::new(RefCell::new(WebRTCManager {
             state: State::DefaultState,
             rtc_peer_connection: None,
             data_channel: None,
@@ -89,9 +93,7 @@ impl WebRTCManager {
             offer: "".into(),
             parent_link: link,
             exit_offer_or_answer_early: false,
-        };
-
-        web_rtc_manager
+        }))
     }
 
     pub fn send_message(&self, message_content: String) {

@@ -78,20 +78,14 @@ impl Component for ChatModel {
     type Properties = ();
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
-        let web_rtc_manager = WebRTCManager::create_default(link.clone());
-
-        let rc = Rc::new(RefCell::new(web_rtc_manager));
-
-        let model = ChatModel {
-            web_rtc_manager: rc.clone(),
+        ChatModel {
+            web_rtc_manager: WebRTCManager::new(link.clone()),
             messages: vec![],
-            link: link,
+            link,
             value: "".into(),
             chat_value: "".into(),
             node_ref: NodeRef::default(),
-        };
-
-        model
+        }
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -133,9 +127,7 @@ impl Component for ChatModel {
             }
 
             Msg::ResetWebRTC => {
-                let web_rtc_manager = WebRTCManager::create_default(self.link.clone());
-                let rc = Rc::new(RefCell::new(web_rtc_manager));
-                self.web_rtc_manager = rc;
+                self.web_rtc_manager = WebRTCManager::new(self.link.clone());
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
@@ -219,9 +211,7 @@ impl Component for ChatModel {
             }
 
             Msg::Disconnect => {
-                let web_rtc_manager = WebRTCManager::create_default(self.link.clone());
-                let rc = Rc::new(RefCell::new(web_rtc_manager));
-                self.web_rtc_manager = rc;
+                self.web_rtc_manager = WebRTCManager::new(self.link.clone());
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
