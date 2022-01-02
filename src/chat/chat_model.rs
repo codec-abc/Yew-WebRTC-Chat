@@ -46,8 +46,8 @@ pub struct ConnectionString {
     pub offer: String, // TODO : convert as JsValue using Json.Parse
 }
 
-pub struct ChatModel {
-    web_rtc_manager: Rc<RefCell<WebRTCManager>>,
+pub struct ChatModel<T: NetworkManager + 'static> {
+    web_rtc_manager: Rc<RefCell<T>>,
     messages: Vec<Message>,
     link: ComponentLink<Self>,
     value: String,
@@ -73,13 +73,13 @@ pub enum Msg {
 
 // UI done from: https://codepen.io/sajadhsm/pen/odaBdd
 
-impl Component for ChatModel {
+impl<T: NetworkManager + 'static> Component for ChatModel<T> {
     type Message = Msg;
     type Properties = ();
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         ChatModel {
-            web_rtc_manager: WebRTCManager::new(link.clone()),
+            web_rtc_manager: T::new(link.clone()),
             messages: vec![],
             link,
             value: "".into(),
@@ -88,17 +88,13 @@ impl Component for ChatModel {
         }
     }
 
-    fn change(&mut self, _: Self::Properties) -> ShouldRender {
-        true
-    }
-
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::StartAsServer => {
                 self.web_rtc_manager
                     .borrow_mut()
                     .set_state(State::Server(ConnectionState::new()));
-                WebRTCManager::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
+                T::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
                 let re_render = true;
                 return re_render;
             }
@@ -107,14 +103,14 @@ impl Component for ChatModel {
                 self.web_rtc_manager
                     .borrow_mut()
                     .set_state(State::Client(ConnectionState::new()));
-                WebRTCManager::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
+                T::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
                 let re_render = true;
                 return re_render;
             }
 
             Msg::UpdateWebRTCState(web_rtc_state) => {
                 self.value = "".into();
-                let debug = ChatModel::get_debug_state_string(&web_rtc_state);
+                let debug = get_debug_state_string(&web_rtc_state);
                 console::log_1(&debug.into());
 
                 // let debug = self.get_serialized_offer_and_candidates();
@@ -127,7 +123,7 @@ impl Component for ChatModel {
             }
 
             Msg::ResetWebRTC => {
-                self.web_rtc_manager = WebRTCManager::new(self.link.clone());
+                self.web_rtc_manager = T::new(self.link.clone());
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
@@ -153,7 +149,7 @@ impl Component for ChatModel {
 
                 match state {
                     State::Server(_connection_state) => {
-                        let result = WebRTCManager::validate_answer(
+                        let result = T::validate_answer(
                             self.web_rtc_manager.clone(),
                             &self.value,
                         );
@@ -170,7 +166,7 @@ impl Component for ChatModel {
                         }
                     }
                     _ => {
-                        let result = WebRTCManager::validate_offer(
+                        let result = T::validate_offer(
                             self.web_rtc_manager.clone(),
                             &self.value,
                         );
@@ -210,7 +206,7 @@ impl Component for ChatModel {
             }
 
             Msg::Disconnect => {
-                self.web_rtc_manager = WebRTCManager::new(self.link.clone());
+                self.web_rtc_manager = T::new(self.link.clone());
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
@@ -238,6 +234,10 @@ impl Component for ChatModel {
                 return re_render;
             }
         }
+    }
+
+    fn change(&mut self, _: Self::Properties) -> ShouldRender {
+        true
     }
 
     fn view(&self) -> Html {
@@ -422,7 +422,7 @@ impl Component for ChatModel {
     }
 }
 
-impl ChatModel {
+impl<T: NetworkManager + 'static> ChatModel<T> {
     fn scroll_top(&self) {
         let node_ref = self.node_ref.clone();
 
@@ -439,7 +439,7 @@ impl ChatModel {
         html! {
             <header class="msger-header">
                 <div style="font-size:25">
-                    {"Rust WebRTC WASM Chat V2.1"}
+                    {"Rust WebRTC WASM Chat V2.2"}
                 </div>
 
                 { self.get_debug_html() }
@@ -583,27 +583,6 @@ impl ChatModel {
         }
     }
 
-    fn get_debug_state_string(state: &State) -> String {
-        match state {
-            State::DefaultState => "Default State".into(),
-            State::Server(connection_state) => format!(
-                "{}\nice gathering: {:?}\nice connection: {:?}\ndata channel: {:?}\n",
-                "Server",
-                connection_state.ice_gathering_state,
-                connection_state.ice_connection_state,
-                connection_state.data_channel_state,
-            ),
-
-            State::Client(connection_state) => format!(
-                "{}\nice gathering: {:?}\nice connection: {:?}\ndata channel: {:?}\n",
-                "Client",
-                connection_state.ice_gathering_state,
-                connection_state.ice_connection_state,
-                connection_state.data_channel_state,
-            ),
-        }
-    }
-
     fn get_debug_html(&self) -> Html {
         let state = self.web_rtc_manager.borrow().get_state();
 
@@ -675,5 +654,26 @@ impl ChatModel {
                 }
             </ul>
         }
+    }
+}
+
+fn get_debug_state_string(state: &State) -> String {
+    match state {
+        State::DefaultState => "Default State".into(),
+        State::Server(connection_state) => format!(
+            "{}\nice gathering: {:?}\nice connection: {:?}\ndata channel: {:?}\n",
+            "Server",
+            connection_state.ice_gathering_state,
+            connection_state.ice_connection_state,
+            connection_state.data_channel_state,
+        ),
+
+        State::Client(connection_state) => format!(
+            "{}\nice gathering: {:?}\nice connection: {:?}\ndata channel: {:?}\n",
+            "Client",
+            connection_state.ice_gathering_state,
+            connection_state.ice_connection_state,
+            connection_state.data_channel_state,
+        ),
     }
 }

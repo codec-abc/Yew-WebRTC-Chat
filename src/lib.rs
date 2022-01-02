@@ -8,6 +8,7 @@ use chat::chat_model::*;
 
 #[allow(unused_imports)]
 use yew::{html, App, Callback, Component, ComponentLink, Html, InputData, ShouldRender};
+use crate::chat::web_rtc_manager::WebRTCManager;
 
 // Called when the wasm module is instantiated
 #[wasm_bindgen(start)]
@@ -20,7 +21,7 @@ pub fn main() -> Result<(), JsValue> {
 
     yew::initialize();
     let div = document.query_selector("#myRustApp").unwrap().unwrap();
-    App::<ChatModel>::new().mount(div);
+    App::<ChatModel<WebRTCManager>>::new().mount(div);
     yew::run_loop();
 
     Ok(())
