@@ -104,7 +104,7 @@ impl Component for ChatModel {
                 self.web_rtc_manager
                     .borrow_mut()
                     .set_state(State::Server(ConnectionState::new()));
-                WebRTCManager::start_web_rtc(self.web_rtc_manager.clone());
+                WebRTCManager::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
                 let re_render = true;
                 return re_render;
             }
@@ -113,7 +113,7 @@ impl Component for ChatModel {
                 self.web_rtc_manager
                     .borrow_mut()
                     .set_state(State::Client(ConnectionState::new()));
-                WebRTCManager::start_web_rtc(self.web_rtc_manager.clone());
+                WebRTCManager::start_web_rtc(self.web_rtc_manager.clone()).expect("Failed to start WebRTC manager");
                 let re_render = true;
                 return re_render;
             }
@@ -450,7 +450,7 @@ impl ChatModel {
         html! {
             <header class="msger-header">
                 <div style="font-size:25">
-                    {"Rust WebRTC WASM Chat V1"}
+                    {"Rust WebRTC WASM Chat V2"}
                 </div>
 
                 { self.get_debug_html() }
