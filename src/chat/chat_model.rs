@@ -1,9 +1,3 @@
-use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::spawn_local;
-use web_sys::*;
-
-use crate::chat::web_rtc_manager::*;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
@@ -11,9 +5,16 @@ use std::str;
 use base64;
 use serde::{Deserialize, Serialize};
 
+use web_sys::{console, Element, RtcDataChannelState};
+
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::spawn_local;
+
 use yew::{
     html, html::NodeRef, Component, ComponentLink, Html, InputData, KeyboardEvent, ShouldRender,
 };
+
+use crate::chat::web_rtc_manager::{ConnectionState, IceCandidate, NetworkManager, State};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MessageSender {
@@ -526,7 +527,11 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
 
     fn get_serialized_offer_and_candidates(&self) -> String {
         let connection_string = ConnectionString {
-            offer: self.web_rtc_manager.borrow().get_offer().expect("no offer yet"),
+            offer: self
+                .web_rtc_manager
+                .borrow()
+                .get_offer()
+                .expect("no offer yet"),
             ice_candidates: self.web_rtc_manager.borrow().get_ice_candidates(),
         };
 

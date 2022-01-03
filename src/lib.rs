@@ -7,8 +7,8 @@ mod chat;
 use chat::chat_model::*;
 
 use crate::chat::web_rtc_manager::WebRTCManager;
-#[allow(unused_imports)]
-use yew::{html, App, Callback, Component, ComponentLink, Html, InputData, ShouldRender};
+
+use yew::App;
 
 // Called when the wasm module is instantiated
 #[wasm_bindgen(start)]

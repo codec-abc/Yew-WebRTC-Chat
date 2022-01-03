@@ -1,18 +1,23 @@
-use js_sys::*;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::*;
+use wasm_bindgen::{JsCast, JsValue};
 
-use crate::chat::chat_model::*;
+use crate::chat::chat_model::{ChatModel, ConnectionString, Msg};
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str;
 
 use base64;
+use js_sys::{Array, Object, Reflect, JSON};
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::JsFuture;
+use web_sys::{
+    console, RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit,
+    RtcDataChannelState, RtcIceCandidate, RtcIceCandidateInit, RtcIceConnectionState,
+    RtcIceGatheringState, RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSessionDescriptionInit,
+};
 
+use crate::{Message, MessageSender};
 use yew::ComponentLink;
 
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
@@ -342,8 +347,9 @@ impl NetworkManager for WebRTCManager {
 
                     console::log_1(&rtc_session_description.clone().into());
 
-                    web_rtc_manager_rc_clone.borrow_mut().offer =
-                        Some(String::from(JSON::stringify(&rtc_session_description).unwrap()));
+                    web_rtc_manager_rc_clone.borrow_mut().offer = Some(String::from(
+                        JSON::stringify(&rtc_session_description).unwrap(),
+                    ));
 
                     let set_local_description_exception_handler =
                         WebRTCManager::get_exception_handler(
