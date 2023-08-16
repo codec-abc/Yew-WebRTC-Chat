@@ -5,14 +5,13 @@ use std::str;
 use base64;
 use serde::{Deserialize, Serialize};
 
-use web_sys::{console, Element, RtcDataChannelState};
+use web_sys::{console, Element, HtmlInputElement, InputEvent, RtcDataChannelState};
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
-use yew::{
-    html, html::NodeRef, Component, ComponentLink, Html, InputData, KeyboardEvent, ShouldRender,
-};
+use yew::{html, html::NodeRef, Context, Component, Html, KeyboardEvent, TargetCast};
+// use yew::prelude::*;
 
 use crate::chat::web_rtc_manager::{ConnectionState, IceCandidate, NetworkManager, State};
 
@@ -39,11 +38,9 @@ pub struct ConnectionString {
     pub ice_candidates: Vec<IceCandidate>,
     pub offer: String, // TODO : convert as JsValue using Json.Parse
 }
-
 pub struct ChatModel<T: NetworkManager + 'static> {
     web_rtc_manager: Rc<RefCell<T>>,
     messages: Vec<Message>,
-    link: ComponentLink<Self>,
     value: String,
     chat_value: String,
     node_ref: NodeRef,
@@ -71,18 +68,18 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
     type Message = Msg;
     type Properties = ();
 
-    fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         ChatModel {
-            web_rtc_manager: T::new(link.clone()),
+            web_rtc_manager: T::new(ctx.link()),
             messages: vec![],
-            link,
             value: "".into(),
             chat_value: "".into(),
             node_ref: NodeRef::default(),
         }
     }
 
-    fn update(&mut self, msg: Self::Message) -> ShouldRender {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    // fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::StartAsServer => {
                 self.web_rtc_manager
@@ -118,7 +115,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             }
 
             Msg::ResetWebRTC => {
-                self.web_rtc_manager = T::new(self.link.clone());
+                self.web_rtc_manager = T::new(ctx.link());
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
@@ -193,7 +190,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             }
 
             Msg::Disconnect => {
-                self.web_rtc_manager = T::new(self.link.clone());
+                self.web_rtc_manager = T::new(ctx.link());
                 self.messages = vec![];
                 self.chat_value = "".into();
                 self.value = "".into();
@@ -221,20 +218,15 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
         }
     }
 
-    fn change(&mut self, _: Self::Properties) -> ShouldRender {
-        true
-    }
-
-    fn view(&self) -> Html {
-        match &self.web_rtc_manager.borrow().get_state() {
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        let content = match &self.web_rtc_manager.borrow().get_state() {
             State::Default => {
                 html! {
                     <>
-                        { self.get_chat_header() }
+                        { self.get_chat_header(ctx) }
 
-                        <main class="msger-chat" id="chat-main" ref=self.node_ref.clone()>
+                        <main class="msger-chat" id="chat-main" ref={self.node_ref.clone()}>
                             <div class="msg left-msg">
-
                                 <div class="msg-bubble">
 
                                     <div class="msg-text">
@@ -244,7 +236,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                                         <button
                                             class="msger-send-btn"
                                             style="border-radius: 3px; padding: 10px; font-size: 1em; border: none; margin-left: 0px; margin-top: 6px;"
-                                            onclick=self.link.callback(|_| Msg::StartAsServer)>
+                                            onclick={ctx.link().callback(move |_| Msg::StartAsServer)}>
                                             {"I will generate an offer first!"}
                                         </button>
                                     </div>
@@ -261,7 +253,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                                             <button
                                                 class="msger-send-btn"
                                                 style="border-radius: 3px; padding: 10px; font-size: 1em; border: none; margin-left: 0px; margin-top: 6px; float: right;"
-                                                onclick=self.link.callback(|_| Msg::ConnectToServer)>
+                                                onclick={ctx.link().callback(move |_| Msg::ConnectToServer)}>
                                                 {"My friend already send me a code!"}
                                             </button>
                                     </div>
@@ -269,7 +261,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                             </div>
                         </main>
 
-                        { self.get_input_for_chat_message() }
+                        { self.get_input_for_chat_message(ctx) }
                     </>
                 }
             }
@@ -277,9 +269,9 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             State::Server(connection_state) => {
                 html! {
                     <>
-                        { self.get_chat_header() }
+                        { self.get_chat_header(ctx) }
 
-                        <main class="msger-chat" id="chat-main" ref=self.node_ref.clone()>
+                        <main class="msger-chat" id="chat-main" ref={self.node_ref.clone()}>
                         {
                             if
                                 connection_state.data_channel_state.is_some() &&
@@ -302,7 +294,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                                                 </div>
 
                                                 <div class="msg-text">
-                                                    { self.get_offer_and_candidates() }
+                                                    { self.get_offer_and_candidates(ctx) }
                                                 </div>
                                             </div>
                                         </div>
@@ -315,7 +307,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
 
                                                 <div class="msg-text">
                                                     { "And then paste his/her answer below "}
-                                                    { self.get_validate_offer_or_answer() }
+                                                    { self.get_validate_offer_or_answer(ctx) }
                                                 </div>
                                             </div>
                                         </div>
@@ -327,7 +319,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                         }
                         </main>
 
-                        { self.get_input_for_chat_message() }
+                        { self.get_input_for_chat_message(ctx) }
                     </>
                 }
             }
@@ -335,9 +327,9 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
             State::Client(connection_state) => {
                 html! {
                     <>
-                        { self.get_chat_header() }
+                        { self.get_chat_header(ctx) }
 
-                        <main class="msger-chat" id="chat-main" ref=self.node_ref.clone()>
+                        <main class="msger-chat" id="chat-main" ref={self.node_ref.clone()}>
                         {
 
                             if connection_state.data_channel_state.is_some()
@@ -358,7 +350,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
                                             </div>
 
                                             <div class="msg-text">
-                                                { self.get_offer_and_candidates() }
+                                                { self.get_offer_and_candidates(ctx) }
                                             </div>
                                         </div>
                                     </div>
@@ -376,7 +368,7 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
 
                                             <div class="msg-text">
                                                 { "Paste here the offer given by your friend:" }
-                                                { self.get_validate_offer_or_answer() }
+                                                { self.get_validate_offer_or_answer(ctx) }
                                             </div>
                                         </div>
                                     </div>
@@ -399,10 +391,16 @@ impl<T: NetworkManager + 'static> Component for ChatModel<T> {
 
                         </main>
 
-                        { self.get_input_for_chat_message() }
+                        { self.get_input_for_chat_message(ctx) }
                     </>
                 }
             }
+        };
+
+        html! {
+            <div class="msger">
+                { content }
+            </div>
         }
     }
 }
@@ -418,7 +416,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         })
     }
 
-    fn get_chat_header(&self) -> Html {
+    fn get_chat_header(&self, ctx: &Context<Self>) -> Html {
         let is_disconnect_button_visible =
             self.web_rtc_manager.borrow().get_state() != State::Default;
         html! {
@@ -436,8 +434,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
                                 <button
                                     style="background: red; border-radius: 3px; padding: 6px; font-size: 1em; border: none; margin-left: 0px; margin-top: 0px; float: right;"
                                     class="msger-send-btn"
-                                    onclick=self.link.callback(|_| Msg::Disconnect)
-                                >
+                                    onclick={ctx.link().callback(move |_| Msg::Disconnect)}>
                                     {"Disconnect"}
                                 </button>
                             </div>
@@ -464,7 +461,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         }
     }
 
-    fn get_input_for_chat_message(&self) -> Html {
+    fn get_input_for_chat_message(&self, ctx: &Context<Self>) -> Html {
         let is_chat_enabled = self.is_chat_enabled();
         let is_send_button_enabled = is_chat_enabled && !self.chat_value.is_empty();
 
@@ -472,21 +469,21 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
             <div>
                 <div
                     class="msger-inputarea"
-                    disabled=!is_chat_enabled
+                    disabled={!is_chat_enabled}
                 >
                     <input
                         type="text"
                         class="msger-input"
-                        disabled=!is_chat_enabled
+                        disabled={!is_chat_enabled}
                         id="chat-message-box"
                         value={self.chat_value.clone()}
-                        oninput=self.link.callback(|e: InputData| Msg::UpdateInputChatValue(e.value))
-                        onkeyup=self.link.callback(|e: KeyboardEvent| Msg::OnKeyUp(e))
+                        oninput={ctx.link().callback(|e: InputEvent| {Msg::UpdateInputChatValue(e.target_unchecked_into::<HtmlInputElement>().value())})}
+                        onkeyup={ctx.link().callback(move |e: KeyboardEvent| Msg::OnKeyUp(e))}
                     />
                     <button
                         class="msger-send-btn"
-                        disabled=!is_send_button_enabled
-                        onclick=self.link.callback(|_| Msg::Send)
+                        disabled={!is_send_button_enabled}
+                        onclick={ctx.link().callback(move |_| Msg::Send)}
                     >
                         {"Send"}
                     </button>
@@ -495,7 +492,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         }
     }
 
-    fn get_validate_offer_or_answer(&self) -> Html {
+    fn get_validate_offer_or_answer(&self, ctx: &Context<Self>) -> Html {
         html! {
             <>
             <div
@@ -505,8 +502,8 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
                 <textarea
                     class="msger-input"
                     style="background:white;"
-                    value=&self.value
-                    oninput=self.link.callback(|e: InputData| Msg::UpdateInputValue(e.value))
+                    value={self.value.clone()}
+                    oninput={ctx.link().callback(|e: InputEvent| {Msg::UpdateInputValue(e.target_unchecked_into::<HtmlInputElement>().value())})}
                 >
                 </textarea >
             </div>
@@ -514,7 +511,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
                 <button
                     class="msger-send-btn"
                     style="border-radius: 3px; padding: 10px; font-size: 1em; border: none; margin-left: 0px; margin-top: 6px; float: right;"
-                    onclick=self.link.callback(|_| Msg::ValidateOffer)
+                    onclick={ctx.link().callback(move |_| Msg::ValidateOffer)}
                 >
                     {"Validate Offer"}
 
@@ -540,7 +537,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
         base64::encode(serialized)
     }
 
-    fn get_offer_and_candidates(&self) -> Html {
+    fn get_offer_and_candidates(&self, ctx: &Context<Self>) -> Html {
         let encoded = self.get_serialized_offer_and_candidates();
         html! {
             <div>
@@ -548,7 +545,7 @@ impl<T: NetworkManager + 'static> ChatModel<T> {
                 <div style="overflow-wrap: break-word; max-width: 867px;" >
                     <div style="font-size:12; margin-top:8; margin-bottom:8;" id="copy-elem"> {encoded} </div>
                     <button
-                        onclick=self.link.callback(|_| Msg::CopyToClipboard)
+                        onclick={ctx.link().callback(move |_| Msg::CopyToClipboard)}
                         class="msger-send-btn"
                         style="border-radius: 3px; padding: 10px; font-size: 1em; border: none; margin-left: 0px; margin-top: 6px; float: left;"
                         >

@@ -18,7 +18,7 @@ use web_sys::{
 };
 
 use crate::{Message, MessageSender};
-use yew::ComponentLink;
+use yew::html::Scope;
 
 type SingleArgClosure = Closure<dyn FnMut(JsValue)>;
 type SingleArgJsFn = Box<dyn FnMut(JsValue)>;
@@ -66,7 +66,7 @@ pub struct IceCandidate {
 }
 
 pub trait NetworkManager {
-    fn new(link: ComponentLink<ChatModel<Self>>) -> Rc<RefCell<Self>>
+    fn new(link: &Scope<ChatModel<Self>>) -> Rc<RefCell<Self>>
     where
         Self: Sized;
     fn send_message(&self, message_content: &str);
@@ -86,18 +86,18 @@ pub struct WebRTCManager {
     exit_offer_or_answer_early: bool,
     ice_candidates: Vec<IceCandidate>,
     offer: Option<String>,
-    parent_link: ComponentLink<ChatModel<Self>>,
+    parent_link: Scope<ChatModel<Self>>,
 }
 
 impl NetworkManager for WebRTCManager {
-    fn new(link: ComponentLink<ChatModel<Self>>) -> Rc<RefCell<Self>> {
+    fn new(link: &Scope<ChatModel<Self>>) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(WebRTCManager {
             state: State::Default,
             rtc_peer_connection: None,
             data_channel: None,
             ice_candidates: Vec::new(),
             offer: None,
-            parent_link: link,
+            parent_link: link.clone(),
             exit_offer_or_answer_early: false,
         }))
     }
@@ -203,7 +203,7 @@ impl NetworkManager for WebRTCManager {
             }) as SingleArgJsFn);
 
             // TODO: .await this
-            JsFuture::from(
+            _ = JsFuture::from(
                 web_rtc_manager_rc_clone
                     .borrow()
                     .rtc_peer_connection
