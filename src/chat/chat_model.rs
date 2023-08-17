@@ -11,7 +11,6 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
 use yew::{html, html::NodeRef, Context, Component, Html, KeyboardEvent, TargetCast};
-// use yew::prelude::*;
 
 use crate::chat::web_rtc_manager::{ConnectionState, IceCandidate, NetworkManager, State};
 
